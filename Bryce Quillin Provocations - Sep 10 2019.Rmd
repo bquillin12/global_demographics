@@ -1,0 +1,297 @@
+---
+title: "Provocations on Opportunities & Risks:\nGlobal Poverty & Demography"
+author: "Bryce Quillin"
+date: "8/7/2019"
+output:
+  beamer_presentation: 
+    keep_tex: yes
+  slidy_presentation: default
+  ioslides_presentation: default
+---
+
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+
+# Overview of Provocations - Opportunities
+**New near-term opportunities and risks are being created by massive structural changes in the size, nature and geographical distribution of global demand for goods and services.**
+
+**
+
+* On the opportunities side, extreme global poverty will likely be eradicated in this generation. 
+* Data are slow to materialize, but the latest figures from a few years ago show global poverty rates falling below 10% for the first time ever. 
+* This is down from almost 30% in 2000, 35% in 1990 and over 40% in 1980. 
+* Less progress has been made in addressing non-income dimensions of poverty, but this alone represents the greatest increase in aggregate global demand and purchasing power in history will continue to grow as income above subsistence needs continues to rise.
+
+# Overview of Provocations - Risks
+* Yet, on the risks side, changing demographic trends will fundamentally change the nature of demand in hard to predict ways that are not yet well appreciated. Demographic change is not an issue for the distant future and it is impacting a broad range of countries. Labor markets in Brazil, for example are already feeling the effects.
+* The world population is growing more slowly and aging at an unprecedented speed. After increasing for five decades, the population of people ages 15-64 (the typical working age) peaked 2012 and is falling. 
+* These global trends--slower population growth and aging--are hitting the enginges of growth in the global economy, not just advanced economies but emerging markets across Asia, Europe and Latin America. 
+* Many EM will grow old before they grow rich. Asset prices will adjust as retirees draw down pensions, with implications for the costs and availability of global capital. The nature of demand for goods and services will need to adjust and the demand for non-traded services will grow faster than traded products. 
+
+# Global demand for goods and services is rising as more households earn above subsistence level incomes
+```{r poverty, echo=FALSE, fig.height=7, fig.width=10, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+library(ggplot2)
+library(ggthemes)
+
+poverty <- read.csv("poverty.csv", sep = ",", header = T)
+
+ggplot(data = poverty) +
+  aes(x = year, y = poverty) +
+  geom_line(color = '#a69d75') +
+  labs(title = 'Global Extreme Poverty Rate (%)',
+       caption = 'Source: Pfizer Global Economics with data from World Bank Group.',
+       subtitle = 'Share of global population living below $1.90 a day (2011 PPP)') +
+  theme_economist() +
+  xlab("") + ylab("") +
+  geom_text(aes(label = poverty, vjust = -0.5)) +
+  theme(plot.title = element_text(face = "bold", size = rel(1.2), hjust = 0.5)) +
+  theme(plot.subtitle = element_text(hjust = 0.5))
+
+```
+
+# The composition of demand will change as countries across the world age.
+```{r wap, echo=FALSE,fig.height=7, fig.width=10, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+# packages
+library(tidyverse)
+library(rvest)
+library(magrittr)
+library(ggmap)
+library(stringr)
+library(maps)
+library(ggthemes)
+
+# read data
+wap <- read.csv("wap.csv", sep = ",", header = T)
+
+# get world map
+map.world <- map_data("world")
+
+# rename USA & UK to match map
+wap$country <- recode(wap$country,
+                      'United States of America' = 'USA',
+                      'United Kingdom' = 'UK',
+                      'Russian Federation' = 'Russia',
+                      'Iran (Islamic Republic of)' = 'Iran',
+                      'Venezuela (Bolivarian Republic of)' = 'Venezuela',
+                      'Bolivia (Plurinational State of)' = 'Bolivia',
+                      'Viet Nam' = 'Vietnam',
+                      'Syrian Arab Republic' = 'Syria',
+                      'United Republic of Tanzania' = 'Tanzania',
+                      'Congo' = 'Republic of Congo',
+                      'Czechia' = 'Czech Republic',
+                      'Republic of Moldova' = 'Moldova',
+                      'North Macedonia' = 'Macedonia',
+                      'Republic of Korea' = 'South Korea',
+                        )
+
+# subset out Anarctica
+map.world.subset <- subset(map.world, !(region == 'Antarctica'))
+
+# join wap to map
+map.world.joined <- left_join(map.world.subset, wap, by = c('region' = 'country'))
+
+# plot map
+wap_map <- ggplot() +
+  geom_polygon(data = map.world.joined, aes(x = long, y = lat, group = group, fill = change)) +
+  xlab("") + ylab("") +
+  #labs(caption = "Source: UN Population Division.") + 
+  theme_economist() +
+  theme(plot.title = element_text(face = "bold", size = rel(1.2), hjust = 0.5)) +
+  theme(plot.caption = element_text(hjust = 0.0)) +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        legend.title = element_blank() 
+  )
+
+ggsave("wap2.png", wap_map, dpi =1000)
+
+```
+
+```{r Cartogram Map, echo=FALSE, fig.height=7, fig.width=10, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+# loading libraries
+library(devtools)
+install_github('omegahat/Rcartogram')
+install_github('chrisbrunsdon/getcartr', subdir='getcartr')
+library(ggplot2)
+library(maptools)
+library(rgeos)
+library(Rcartogram)
+library(getcartr)
+library(fftw)
+library(rgdal)
+library(sp)
+library(rgeos)
+
+# load world map & working-age share population data
+world <- readShapePoly('TM_WORLD_BORDERS-0.3.shp') # These data were obtained from: http://thematicmapping.org/downloads/world_borders.php
+wap <- read.csv("wap.csv", sep = ",", header = T)
+# wap$change <- scale(wap$change)
+
+# join the map with the working-age population data
+matched.indices <- match(world@data[, "UN"], wap[, "code"])
+world@data <- data.frame(world@data, wap[matched.indices, ])
+world@data <- na.omit(world@data) # remove missing values as map has some countries not included in pop data
+
+#compute cartogram transformation of each country using change in working-age pop with degree of Gaussian blur = 0.5
+world@proj4string <- CRS(as.character(NA))
+world.carto <- quick.carto(world, world@data$change, blur = 0.5)
+
+
+
+
+```
+
+```{r Cartogram Map 2, echo=FALSE, fig.height=7, fig.width=10, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE)
+
+library(sf)             # spatial data classes
+library(rnaturalearth)  # world map data
+library(readxl)         # reading excel files
+library(dplyr)          # data manipulation
+library(tidyr)          # data manipulation
+library(purrr)          # data manipulation
+library(cartogram)      # cartograms creation
+library(tmap)           # maps creation
+
+# load data
+world_map = ne_countries(returnclass = "sf")
+
+
+if(!dir.exists("data")) dir.create("data")
+download.file("http://gapm.io/dl_pop", destfile = "data/pop1800_2100.xlsx")
+world_pop = read_xlsx("data/pop1800_2100.xlsx", sheet = 7)
+
+# cleaning
+world_map = world_map %>% 
+  select(sovereignt) %>% 
+  filter(sovereignt != "Antarctica") %>% 
+  st_transform(world_map, crs = "+proj=robin")
+
+world_pop = world_pop %>% 
+  mutate(sovereignt = name) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Tanzania", "United Republic of Tanzania")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "United States", "United States of America")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Congo, Dem. Rep.", "Democratic Republic of the Congo")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Bahamas", "The Bahamas")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Serbia", "Republic of Serbia")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Macedonia, FYR", "Macedonia")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Slovak Republic", "Slovakia")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Czech Republic", "Czechia")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Congo, Rep.", "Republic of the Congo")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Kyrgyz Republic", "Kyrgyzstan")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Lao", "Laos")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Swaziland", "eSwatini")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Cote d'Ivoire", "Ivory Coast")) %>% 
+  mutate(sovereignt = replace(sovereignt, sovereignt == "Timor-Leste", "East Timor"))
+
+# prepare
+world_data = left_join(world_map, world_pop, by = "sovereignt") %>% 
+  na.omit() %>% 
+  select(-geo, -name, -indicator) %>% 
+  gather(key = "year", value = "population", `1800.0`:`2100.0`) %>% 
+  mutate(year = as.integer(year))
+
+world_data2 <- left_join(world_map, wap2, by = "sovereignt") %>% 
+  na.omit()
+
+world_data = world_data %>% 
+  group_by(year) %>% 
+  mutate(total_pop = sum(as.numeric(population), na.rm = TRUE)) %>% 
+  mutate(title = paste0("Year: ", year, "\nTotal population (mln): ", round(total_pop/1e6, 2)))
+
+# subset
+world_data = world_data %>% 
+  filter(year %in% seq(1800, 2100, by = 25))
+
+# create map
+world_data_2100 = world_data %>%
+  filter(year == 2100)
+world_carto1 = cartogram_cont(world_data, "population", maxSizeError = 1.5)
+plot(world_carto1["population"])
+
+
+world_carto2 = cartogram_cont(world_data2, "change", maxSizeError = 1.5)
+plot(world_carto1["population"])
+
+
+
+############################
+wap <- read.csv("wap.csv", sep = ",", header = T)
+
+# cleaning
+world_map = world_map %>% 
+  select(sovereignt) %>% 
+  filter(sovereignt != "Antarctica") %>% 
+  st_transform(world_map, crs = "+proj=robin")
+
+# join
+map.world.joined <- left_join(world_map, wap, by = c('sovereignt' = 'country')) %>% 
+  na.omit %>% 
+  select(-code, -Parent.code) 
+
+# create cartogram
+world_carto <- cartogram_cont(map.world.joined, "change", maxSizeError = 1.5)
+
+```
+
+
+
+```{r}
+contributions <- read.csv("contributions.csv", sep = ",", header = T)
+
+contributions_ae <- ggplot(contributions, aes(x = years, y = contributions)) + geom_col(aes(fill = variable)) +
+  theme_economist() +
+  ylab("Annual Potential GDP growth (%)") + xlab("") +
+  labs(title = "Advanced Economies") +
+  theme(plot.title = element_text(face = "bold", size = rel(1.2), hjust = 0.5)) +
+  theme(plot.caption = element_text(hjust = 0.0)) +
+  theme(legend.title = element_blank()) +
+  #scale_fill_brewer(palette = 3) +
+  theme(legend.text = element_text(size = 9)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggsave("contributions_ae.png", contributions_ae, dpi = 2000)
+ 
+```
+
+
+```{r Contributions EM}
+library(ggplot2)
+library(ggthemes)
+
+contributions_em <- read.csv("contributions_em.csv", sep = ",", header = T)
+
+
+contributions_em <- ggplot(contributions_em, aes(x = years, y = contributions)) + geom_col(aes(fill = variable)) +
+  theme_economist() +
+  xlab("") + ylab("") +
+  labs(title = "Emerging Market Economies") +
+  theme(plot.title = element_text(face = "bold", size = rel(1.2), hjust = 0.5)) +
+  theme(plot.caption = element_text(hjust = 0.0)) +
+  theme(legend.title = element_blank()) +
+  theme(legend.text = element_text(size = 9)) +
+  #scale_fill_brewer(palette = 3) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+ggsave("contributions_em.png", dpi = 2000)
+
+```
+
+```{r}
+library(ggpubr)
+
+panel <- ggarrange(contributions_ae, contributions_em, ncol = 2, nrow = 1, common.legend = T, legend = "bottom") 
+ggsave("contributions_panel.png", panel, dpi = 2000)
+
+ 
+```
+
